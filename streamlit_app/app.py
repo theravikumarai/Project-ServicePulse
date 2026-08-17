@@ -41,8 +41,8 @@ st.markdown(
 )
 
 st.title("🚨 ServicePulse")
-st.subheader("Enterprise Incident Intelligence Dashboard")
-st.caption("Real-time incident analytics powered by AWS Redshift")
+st.subheader("Enterprise Ticket Intelligence Dashboard")
+st.caption("Real-time ticket analytics powered by AWS Redshift")
 
 # Data freshness indicator
 col_refresh, col_status = st.columns([1, 3])

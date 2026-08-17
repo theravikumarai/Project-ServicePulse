@@ -1,7 +1,6 @@
 import boto3
 import streamlit as st
 
-
 region = st.secrets["AWS_DEFAULT_REGION"]
 secret_arn = st.secrets["REDSHIFT_SECRET_ARN"]
 

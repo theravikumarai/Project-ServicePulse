@@ -1,722 +1,1168 @@
-# Project-ServicePulse
+# ServicePulse
 
-**Production-oriented ServiceNow Data Engineering Platform on AWS**
+> **Enterprise Incident Data Engineering & Analytics Platform on AWS**
 
-ServicePulse is an end-to-end data engineering platform that ingests ServiceNow incident data through the ServiceNow REST API, processes it using a **Bronze → Silver → Gold** architecture, and delivers curated analytical data through **Amazon Redshift** for business intelligence and future machine-learning workloads.
+ServicePulse is an end-to-end cloud data engineering platform for ingesting, processing, validating, warehousing, monitoring, and analyzing enterprise ticket data.
 
-The platform is designed around incremental processing, reliable orchestration, data quality, security, observability, and infrastructure automation.
+The platform follows a production-oriented **Bronze → Silver → Gold** architecture and integrates AWS serverless services with Python data engineering components and an interactive Streamlit analytics application.
 
-> **Status:** 🚧 In Development
-
----
-
-## Architecture
-
-```text
-                         ┌─────────────────────┐
-                         │      ServiceNow     │
-                         │      REST API       │
-                         └──────────┬──────────┘
-                                    │
-                                    │ Incremental
-                                    │ Extraction
-                                    ▼
-                         ┌─────────────────────┐
-                         │   Amazon EventBridge│
-                         │    Daily Schedule   │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │   AWS Step Functions│
-                         │     Orchestrator   │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │      AWS Lambda     │
-                         │   API Ingestion     │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                    ┌─────────────────────────────┐
-                    │          S3 BRONZE          │
-                    │                             │
-                    │      Raw ServiceNow Data    │
-                    └──────────────┬──────────────┘
-                                   │
-                                   ▼
-                         ┌─────────────────────┐
-                         │      AWS Glue       │
-                         │      PySpark        │
-                         │   Transformation    │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                    ┌─────────────────────────────┐
-                    │          S3 SILVER          │
-                    │                             │
-                    │   Cleaned / Validated       │
-                    │        Parquet Data         │
-                    └──────────────┬──────────────┘
-                                   │
-                                   ▼
-                         ┌─────────────────────┐
-                         │    Data Quality     │
-                         │      Checks         │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                    ┌─────────────────────────────┐
-                    │      Amazon Redshift        │
-                    │                             │
-                    │        GOLD / DWH           │
-                    │       Star Schema           │
-                    └──────────────┬──────────────┘
-                                   │
-                       ┌───────────┴───────────┐
-                       │                       │
-                       ▼                       ▼
-                ┌──────────────┐       ┌──────────────┐
-                │   Power BI   │       │ Future ML    │
-                │  Analytics   │       │   Platform   │
-                └──────────────┘       └──────────────┘
-```
-
-### Supporting AWS Services
-
-```text
-IAM              → Access control and least privilege
-Secrets Manager  → ServiceNow credentials
-CloudWatch       → Logs and monitoring
-SNS              → Alerts and notifications
-Glue Catalog     → Metadata and schema management
-Terraform        → Infrastructure as Code
-GitHub Actions   → CI/CD
-```
+![alt text](image.png)
 
 ---
 
-## Why ServicePulse?
+## Table of Contents
 
-ServiceNow generates a continuous stream of operational ticket data. ServicePulse turns that operational data into a reliable analytical data platform.
-
-The platform provides:
-
-* Automated ServiceNow data ingestion
-* Incremental processing
-* Raw data preservation
-* Distributed data transformation
-* Data quality validation
-* Analytical data warehousing
-* Automated daily orchestration
-* Operational monitoring
-* BI-ready datasets
-* ML-ready data assets
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Data Flow](#data-flow)
+- [AWS Services](#aws-services)
+- [Repository Structure](#repository-structure)
+- [Data Architecture](#data-architecture)
+- [Pipeline Components](#pipeline-components)
+- [Data Warehouse](#data-warehouse)
+- [Analytics Dashboard](#analytics-dashboard)
+- [Security](#security)
+- [Observability & Alerting](#observability--alerting)
+- [Configuration & Secrets](#configuration--secrets)
+- [Local Development](#local-development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Operational Workflow](#operational-workflow)
+- [Engineering Practices](#engineering-practices)
+- [CI/CD](#cicd)
+- [Roadmap](#roadmap)
+- [Project Status](#project-status)
+- [Portfolio Highlights](#portfolio-highlights)
+- [Author](#author)
 
 ---
 
-## Data Architecture
+## Overview
 
-ServicePulse follows the **Medallion Architecture**.
+ServicePulse transforms enterprise ticket data into a reliable analytical dataset and operational dashboard.
+
+The implemented platform covers the complete path:
 
 ```text
 ServiceNow
-    │
-    ▼
-┌─────────────┐
-│   Bronze    │  Raw source data
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Silver    │  Cleaned & validated data
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│    Gold     │  Business-ready warehouse
-└──────┬──────┘
-       │
-       ├──────────► Power BI
-       │
-       └──────────► Future ML workloads
-```
-
-### Bronze
-
-**Amazon S3**
-
-Stores raw ServiceNow API responses with minimal transformation.
-
-Primary goals:
-
-* Preserve source data
-* Auditability
-* Replayability
-* Historical retention
-
-### Silver
-
-**Amazon S3 + AWS Glue + PySpark**
-
-Contains cleaned and standardized data stored in Parquet format.
-
-Primary processing includes:
-
-* Schema normalization
-* Data type conversion
-* Deduplication
-* Null handling
-* Timestamp standardization
-* Data validation
-* Derived attributes
-
-### Gold
-
-**Amazon Redshift**
-
-Contains curated analytical datasets modeled using dimensional modeling principles.
-
-The initial warehouse will include an incident fact table and supporting dimensions such as:
-
-```text
-fact_incident
-
-dim_date
-dim_user
-dim_assignment_group
-dim_priority
-dim_category
-dim_state
-```
-
----
-
-## Key Engineering Capabilities
-
-### Incremental Ingestion
-
-ServiceNow records are extracted using an incremental strategy based on fields such as:
-
-```text
-sys_updated_on
-```
-
-Only newly created or modified records are processed during each pipeline execution.
-
-### Pagination
-
-ServiceNow API responses are processed in bounded batches to avoid relying on a single long-running Lambda execution.
-
-### Checkpointing
-
-The pipeline maintains the last successfully processed extraction point.
-
-```text
-Last Successful Checkpoint
-          │
-          ▼
-    ServiceNow API
-          │
-          ▼
-New / Updated Records
-```
-
-### Idempotency
-
-Repeated processing of the same source data should not create duplicate analytical records.
-
-ServiceNow's `sys_id` provides a stable identifier for incident records.
-
-### Data Quality
-
-Validation is performed before data reaches the Gold warehouse.
-
-Examples:
-
-* Null checks
-* Duplicate checks
-* Schema validation
-* Valid state/priority values
-* Timestamp validation
-* Referential integrity
-* Business-rule validation
-
-### Fault Tolerance
-
-The workflow supports:
-
-* Retries
-* Failure states
-* Checkpoint recovery
-* Pipeline alerts
-* Safe reprocessing
-
----
-
-## Daily Pipeline
-
-The target production workflow is:
-
-```text
+    ↓
 EventBridge
-     │
-     ▼
+    ↓
 Step Functions
-     │
-     ▼
-Retrieve Checkpoint
-     │
-     ▼
-ServiceNow API
-     │
-     ▼
-Lambda Ingestion
-     │
-     ▼
-S3 Bronze
-     │
-     ▼
+    ↓
+AWS Lambda
+    ↓
+Amazon S3 - Bronze
+    ↓
 AWS Glue / PySpark
-     │
-     ▼
-S3 Silver
-     │
-     ▼
+    ↓
+Amazon S3 - Silver
+    ↓
 Data Quality
-     │
-     ▼
-Amazon Redshift
-     │
-     ▼
-Power BI
+    ↓
+Amazon Redshift Serverless - Gold
+    ↓
+Redshift Data API
+    ↓
+Streamlit
+    ↓
+Operational Analytics
 ```
 
-The pipeline is intended to run automatically once per day.
-
----
-
-## Technology Stack
-
-| Category       | Technology                  |
-| -------------- | --------------------------- |
-| Source         | ServiceNow REST API         |
-| Language       | Python                      |
-| Processing     | PySpark                     |
-| Data Lake      | Amazon S3                   |
-| ETL            | AWS Glue                    |
-| Metadata       | AWS Glue Data Catalog       |
-| Ingestion      | AWS Lambda                  |
-| Orchestration  | AWS Step Functions          |
-| Scheduling     | Amazon EventBridge          |
-| Data Warehouse | Amazon Redshift             |
-| BI             | Power BI                    |
-| Monitoring     | Amazon CloudWatch           |
-| Alerting       | Amazon SNS                  |
-| Secrets        | AWS Secrets Manager         |
-| Security       | AWS IAM                     |
-| Infrastructure | Terraform                   |
-| Source Control | Git / GitHub                |
-| CI/CD          | GitHub Actions              |
-| Future ML      | AWS ML Services / SageMaker |
-
----
-
-## Repository Structure
+The platform also includes:
 
 ```text
-servicepulse/
+IAM
+Secrets Manager
+CloudWatch
+SNS
+GitHub
+Pytest
+```
+
+This makes ServicePulse more than a dashboard: it demonstrates an end-to-end **data ingestion, transformation, warehousing, observability, security, and analytics workflow**.
+
+---
+
+# Architecture
+
+## High-Level Architecture
+
+```text
+                              ┌─────────────────────┐
+                              │      ServiceNow     │
+                              │      REST API       │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │    EventBridge      │
+                              │     Scheduler       │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │   Step Functions    │
+                              │    Orchestration    │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │       Lambda        │
+                              │   Ingestion Layer   │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │      S3 BRONZE      │
+                              │      Raw Data       │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │     AWS Glue        │
+                              │      PySpark        │
+                              │  Transformations    │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │      S3 SILVER      │
+                              │ Clean / Standardized│
+                              │    Parquet Data     │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │    Data Quality     │
+                              │   Validation Layer  │
+                              └──────────┬──────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │ Amazon Redshift     │
+                              │      Serverless     │
+                              │      GOLD / DWH     │
+                              └──────────┬──────────┘
+                                         │
+                              Redshift Data API
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │     Streamlit       │
+                              │ ServicePulse        │
+                              │ Analytics Dashboard  │
+                              └─────────────────────┘
+
+
+     ┌─────────────────────────────────────────────────────────────┐
+     │              Platform Security & Operations                 │
+     │                                                             │
+     │  IAM │ Secrets Manager │ CloudWatch │ SNS │ Logging         │
+     └─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# Data Flow
+
+## End-to-End Pipeline
+
+### 1. Source
+
+Incident records originate from the enterprise incident source / ServiceNow API.
+
+### 2. Scheduling
+
+Amazon EventBridge initiates the scheduled pipeline execution.
+
+### 3. Orchestration
+
+AWS Step Functions controls the workflow, including execution sequencing and failure/retry handling.
+
+### 4. Ingestion
+
+AWS Lambda retrieves incident data and handles the ingestion process.
+
+### 5. Bronze Layer
+
+Raw data is persisted in Amazon S3.
+
+The Bronze layer preserves source-level information for traceability and replayability.
+
+### 6. Transformation
+
+AWS Glue with PySpark processes the raw dataset.
+
+Typical processing includes:
+
+- Schema normalization
+- Data type conversion
+- Null handling
+- Deduplication
+- Timestamp handling
+- Derived fields
+- Data standardization
+
+### 7. Silver Layer
+
+The transformed dataset is stored in S3 as cleaned, analytics-ready data.
+
+### 8. Data Quality
+
+Data quality validation is applied before loading analytical data into the warehouse.
+
+### 9. Gold Layer
+
+Amazon Redshift Serverless stores the business-ready analytical dataset.
+
+### 10. Analytics
+
+The Streamlit application retrieves data through the Redshift Data API and presents operational insights.
+
+---
+
+# AWS Services
+
+| Service | Responsibility |
+|---|---|
+| Amazon EventBridge | Pipeline scheduling |
+| AWS Step Functions | Workflow orchestration |
+| AWS Lambda | Serverless ingestion / processing |
+| Amazon S3 | Bronze and Silver data lake layers |
+| AWS Glue | ETL and PySpark transformations |
+| AWS Glue Data Catalog | Metadata / schema management |
+| Amazon Redshift Serverless | Gold analytical warehouse |
+| Redshift Data API | Application-to-warehouse access |
+| AWS Secrets Manager | Secure database credentials |
+| AWS IAM | Authentication and authorization |
+| Amazon CloudWatch | Logs and operational monitoring |
+| Amazon SNS | Operational notifications and alerts |
+
+---
+
+# Repository Structure
+
+The repository follows a layered structure separating ingestion, business logic, persistence, analytics, infrastructure-related assets, and tests.
+
+```text
+SERVICEPULSE/
 │
-├── README.md
 │
-├── docs/
-│   ├── architecture.md
-│   ├── data-model.md
-│   ├── ingestion.md
-│   ├── data-quality.md
-│   ├── orchestration.md
-│   ├── security.md
-│   ├── deployment.md
-│   ├── monitoring.md
-│   └── ml-roadmap.md
+├── .github/
+│   └── ...                         # GitHub workflows / repository automation
+│
+├── .streamlit/
+│   └── secrets.toml                # Local Streamlit secrets (NOT committed)
+│
+├── glue/
+│   └── ...                         # AWS Glue / PySpark ETL jobs
+│
+├── lambda_build/
+│   └── ...                         # Lambda build / packaging artifacts
 │
 ├── src/
 │   ├── ingestion/
-│   ├── common/
-│   └── ...
+│   │   └── ...                     # Source/API ingestion components
+│   │
+│   ├── repositories/
+│   │   └── ...                     # Data access / persistence layer
+│   │
+│   ├── services/
+│   │   └── ...                     # Business/application services
+│   │
+│   ├── __init__.py
+│   └── handler.py                  # Lambda entry point
 │
-├── glue/
-│
-├── sql/
-│
-├── terraform/
+├── streamlit_app/
+│   ├── app.py                      # Streamlit application
+│   ├── config.py                   # Application configuration
+│   ├── database.py                 # Redshift Data API client
+│   └── queries.py                  # Analytical SQL queries
 │
 ├── tests/
+│   └── ...                         # Automated tests
 │
-├── .github/
-│   └── workflows/
+├── .env.example                    # Environment variable template
+├── .gitignore
+├── pytest.ini
+├── README.md
+└── requirements.txt                # Backend / pipeline dependencies
+```
+
+### Layer Responsibilities
+
+```text
+src/
+ │
+ ├── ingestion/       → Extract data from source systems
+ │
+ ├── services/        → Business logic and orchestration
+ │
+ └── repositories/    → Persistence and AWS data access
+
+glue/
+ │
+ └── ETL              → Transform Bronze → Silver
+
+streamlit_app/
+ │
+ ├── database.py      → Redshift connectivity
+ ├── queries.py       → SQL abstraction
+ └── app.py           → Analytics presentation
+
+tests/
+ │
+ └── Validation       → Automated quality checks
+```
+
+---
+
+# Data Architecture
+
+ServicePulse follows a **Medallion Architecture**.
+
+```text
+                    DATA LAKE / WAREHOUSE
+
+┌─────────────────────────────────────────────────────────┐
+│ BRONZE                                                  │
+│                                                         │
+│ Raw ServiceNow / Incident Data                          │
+│ Amazon S3                                               │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│ SILVER                                                  │
+│                                                         │
+│ Cleaned + Standardized + Validated Data                 │
+│ Amazon S3 / Parquet                                     │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│ GOLD                                                    │
+│                                                         │
+│ Business-ready analytical datasets                      │
+│ Amazon Redshift Serverless                              │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+                            ▼
+                  ServicePulse Analytics
+```
+
+## Bronze
+
+Purpose:
+
+- Preserve raw source data
+- Maintain traceability
+- Support replay/reprocessing
+- Retain historical source information
+
+## Silver
+
+Purpose:
+
+- Standardize schema
+- Clean records
+- Apply transformations
+- Normalize timestamps
+- Handle missing values
+- Remove duplicates
+- Store optimized Parquet data
+
+## Gold
+
+Purpose:
+
+- Provide analytical datasets
+- Support dashboard queries
+- Support BI workloads
+- Provide a foundation for downstream ML
+
+---
+
+# Pipeline Components
+
+## ServiceNow Ingestion
+
+The ingestion layer is responsible for retrieving incident information from the source system.
+
+Responsibilities include:
+
+- API communication
+- Authentication
+- Request handling
+- Pagination
+- Incremental extraction
+- Error handling
+- Data handoff to the AWS pipeline
+
+---
+
+## EventBridge
+
+EventBridge provides scheduled execution of the data pipeline.
+
+```text
+Schedule
+   ↓
+EventBridge
+   ↓
+Step Functions
+```
+
+This removes the need for manual pipeline execution.
+
+---
+
+## Step Functions
+
+Step Functions coordinates the pipeline workflow.
+
+Conceptually:
+
+```text
+Start
+  ↓
+Ingestion
+  ↓
+Validation
+  ↓
+S3 Bronze
+  ↓
+Glue Transformation
+  ↓
+S3 Silver
+  ↓
+Data Quality
+  ↓
+Redshift Load
+  ↓
+Success
+```
+
+![alt text](image-1.png)
+
+
+Failure paths and retries are handled at the orchestration layer.
+
+---
+
+## AWS Lambda
+
+Lambda provides serverless execution for ingestion and application-level pipeline logic.
+
+The repository entry point is:
+
+```text
+src/handler.py
+```
+
+The implementation is designed around modular ingestion, service, and repository layers rather than placing the entire workflow inside a single Lambda function.
+
+---
+
+## AWS Glue / PySpark
+
+Glue performs distributed transformation of the raw incident data.
+
+The transformation layer is maintained under:
+
+```text
+glue/
+```
+
+The resulting data is written to the Silver layer in an analytics-friendly format.
+
+---
+
+# Data Warehouse
+
+## Amazon Redshift Serverless
+
+Redshift Serverless acts as the Gold analytical warehouse.
+
+Current application configuration:
+
+```text
+Database: dev
+Schema:   servicepulse
+Table:    fact_incidents
+```
+
+The incident fact dataset contains attributes such as:
+
+```text
+incident_id
+incident_number
+short_description
+state
+state_label
+priority
+priority_label
+urgency
+impact
+category
+subcategory
+created_at
+updated_at
+incident_age_days
+```
+
+---
+
+## Redshift Data API
+
+The Streamlit application uses the Redshift Data API instead of maintaining a traditional persistent database connection.
+
+```text
+ExecuteStatement
+       ↓
+DescribeStatement
+       ↓
+GetStatementResult
+       ↓
+Pandas DataFrame
+```
+
+This is well suited to the serverless application architecture.
+
+---
+
+# Analytics Dashboard
+
+ServicePulse provides an interactive operational analytics dashboard built with Streamlit.
+
+![alt text](image-2.png)
+
+## Executive KPIs
+
+The dashboard provides:
+
+- Total Incidents
+- Open Incidents
+- Critical Incidents
+- Average Incident Age
+- On Hold Incidents
+
+## Interactive Filters
+
+Users can filter the analytics by:
+
+- Date Range
+- Incident State
+- Priority
+- Category
+
+## Visual Analytics
+
+The dashboard includes:
+
+### Incident Trend
+
+![alt text](image-3.png)
+
+Incident creation volume over time.
+
+### Incident Status Distribution
+
+![alt text](image-4.png)
+
+Distribution across:
+
+- Closed
+- In Progress
+- New
+- On Hold
+
+### Priority Distribution
+
+![alt text](image-5.png)
+
+Analysis across:
+
+- Critical
+- High
+- Moderate
+- Low
+- Planning
+
+### Category Distribution
+
+![alt text](image-6.png)
+
+Analysis across incident categories such as:
+
+- Inquiry
+- Hardware
+- Software
+- Network
+- Database
+- Unknown
+
+### Incident Aging
+
+![alt text](image-7.png)
+
+Aging buckets include:
+
+```text
+0–2 days
+3–7 days
+8–14 days
+15–30 days
+30+ days
+```
+
+### Incident Details
+
+![alt text](image-8.png)
+
+The dashboard exposes incident-level details including:
+
+- Incident ID
+- Incident Number
+- Description
+- State
+- Priority
+- Category
+- Urgency
+- Impact
+- Age
+- Created Date
+
+---
+
+# Application Layer
+
+The Streamlit application is intentionally separated into configuration, database access, SQL, and presentation layers.
+
+```text
+streamlit_app/
 │
-├── requirements.txt
-└── .gitignore
-```
-
-The repository structure will evolve as the implementation progresses.
-
----
-
-## Current Implementation Status
-
-| Component                  | Status     |
-| -------------------------- | ---------- |
-| Project architecture       | 🟢 Defined |
-| Analytics Dashboard        | 🟢 Implemented |
-| ServiceNow API integration | ⚪ Planned  |
-| Incremental ingestion      | ⚪ Planned  |
-| S3 Bronze                  | ⚪ Planned  |
-| AWS Glue Silver            | ⚪ Planned  |
-| Data Quality               | ⚪ Planned  |
-| Redshift Gold              | ⚪ Planned  |
-| Step Functions             | ⚪ Planned  |
-| EventBridge                | ⚪ Planned  |
-| CloudWatch                 | ⚪ Planned  |
-| SNS alerts                 | ⚪ Planned  |
-| Power BI                   | ⚪ Planned  |
-| Terraform                  | ⚪ Planned  |
-| CI/CD                      | ⚪ Planned  |
-| Future ML platform         | 🔵 Future  |
-
-> Status indicators will be updated as each component is implemented and tested.
-
----
-
-## Documentation
-
-Detailed engineering documentation will be maintained separately from this README.
-
-| Document                                    | Description                                                     |
-| ------------------------------------------- | --------------------------------------------------------------- |
-| [`architecture.md`](docs/architecture.md)   | System architecture and design decisions                        |
-| [`data-model.md`](docs/data-model.md)       | Silver schema and Redshift dimensional model                    |
-| [`ingestion.md`](docs/ingestion.md)         | ServiceNow API, pagination, checkpoints and incremental loading |
-| [`data-quality.md`](docs/data-quality.md)   | Data validation and quality rules                               |
-| [`orchestration.md`](docs/orchestration.md) | Step Functions and EventBridge workflow                         |
-| [`security.md`](docs/security.md)           | IAM, Secrets Manager and security controls                      |
-| [`deployment.md`](docs/deployment.md)       | Terraform and deployment procedures                             |
-| [`monitoring.md`](docs/monitoring.md)       | CloudWatch, logging and alerting                                |
-| [`ml-roadmap.md`](docs/ml-roadmap.md)       | Future ML use cases and data requirements                       |
-
----
-
-## Getting Started
-
-> Detailed setup instructions will be added as the platform components are implemented.
-
-### Prerequisites
-
-Expected requirements include:
-
-* AWS account
-* ServiceNow instance with API access
-* Python 3.x
-* AWS CLI
-* Terraform
-* Git
-* Power BI Desktop
-* Appropriate AWS IAM permissions
-
-### High-Level Setup
-
-```text
-1. Configure AWS environment
-2. Configure ServiceNow API access
-3. Store credentials in AWS Secrets Manager
-4. Deploy infrastructure
-5. Configure S3 data lake
-6. Deploy Lambda ingestion
-7. Configure Glue jobs
-8. Configure Redshift
-9. Deploy Step Functions workflow
-10. Configure EventBridge schedule
-11. Connect Power BI
-```
-
-Implementation-specific instructions will be documented in `docs/`.
-
----
-
-## Analytics
-
-The Gold warehouse is intended to support operational dashboards such as:
-
-### Executive KPIs
-
-* Total Tickets
-* Open Tickets
-* Resolved Tickets
-* Current Backlog
-* SLA Breach Rate
-* Average Resolution Time
-* Average Response Time
-
-### Operational Analysis
-
-* Tickets by priority
-* Tickets by category
-* Tickets by assignment group
-* Tickets by state
-* Ticket trends over time
-
-### SLA Analysis
-
-* SLA breaches by priority
-* SLA breaches by assignment group
-* Resolution time trends
-* SLA compliance trends
-
----
-
-## ServicePulse Analytics Dashboard
-
-ServicePulse includes an interactive **Streamlit-based analytics dashboard** that provides real-time incident analytics powered by the Redshift data warehouse.
-
-### Dashboard Features
-
-**Real-Time KPIs**
-
-* Total Incidents
-* Open Incidents
-* Critical Open Incidents (actionable metric)
-* Average Incident Age
-* On Hold Incidents
-
-**Interactive Filters**
-
-* Date Range
-* Incident State
-* Priority Level
-* Category
-
-All KPIs and charts react dynamically to filter changes.
-
-**Analytics Charts**
-
-* **Incident Trend** — Monthly incident creation trend line
-* **Incident Status Distribution** — Pie chart showing incident state breakdown
-* **Priority Distribution** — Horizontal bar chart by priority level
-* **Category Distribution** — Horizontal bar chart by incident category
-* **Incident Aging Analysis** — Bar chart with aging buckets (0-2, 3-7, 8-14, 15-30, 30+ days)
-
-**Incident Details Table**
-
-* Searchable and sortable incident data
-* Key incident attributes (ID, description, state, priority, category, age, created date)
-* Fully responsive to filter selection
-
-### Technology Stack
-
-* **Frontend Framework:** Streamlit
-* **Data Visualization:** Plotly (interactive charts)
-* **Data Processing:** Pandas
-* **Database Connection:** AWS Redshift Data API
-* **Authentication:** AWS Secrets Manager
-* **Deployment:** Streamlit Cloud (or self-hosted)
-
-### Architecture
-
-```text
-Amazon Redshift Data Warehouse
-           │
-           │ (Redshift Data API)
-           │
-           ▼
-    Python / Pandas
-           │
-           ▼
-    Streamlit Application
-           │
-           ├────────► Interactive Filters
-           │
-           ├────────► KPI Cards
-           │
-           ├────────► Plotly Charts
-           │
-           └────────► Incident Details Table
-           │
-           ▼
-    User Browser
-```
-
-### Data Freshness
-
-The dashboard shows:
-
-* **Last Refresh Time** — When data was last queried from Redshift
-* **Connection Status** — AWS Redshift connection indicator
-* **Record Count** — Number of incidents in the current view
-
-This demonstrates operational awareness of the data pipeline.
-
-### Deployment
-
-The dashboard can be deployed to:
-
-* **Streamlit Cloud** — Free community deployment
-* **Self-hosted** — Docker container on AWS ECS, EC2, or on-premises
-* **AWS-native** — Integration with AWS services for enterprise deployments
-
----
-
-## Future ML Platform
-
-The curated Gold datasets are designed to support a separate downstream ML project.
-
-### Planned Use Cases
-
-**Ticket Classification**
-
-```text
-Ticket Description
+├── app.py
+│      │
+│      ├── Dashboard
+│      ├── Filters
+│      ├── KPIs
+│      └── Visualizations
+│
+├── database.py
+│      │
+│      └── Redshift Data API
+│
+├── queries.py
+│      │
+│      └── Analytical SQL
+│
+└── config.py
        │
-       ▼
+       └── Runtime configuration
+```
+
+Streamlit caching is used to reduce unnecessary repeated warehouse queries:
+
+```python
+@st.cache_data(ttl=300)
+def load_incidents():
+    client = RedshiftClient()
+    return client.execute_query(get_incidents_query())
+```
+
+---
+
+# Security
+
+Security is implemented using AWS-native mechanisms.
+
+## IAM
+
+IAM is used to control access to AWS resources.
+
+The application and pipeline use role/user permissions appropriate to the required AWS operations.
+
+## AWS Secrets Manager
+
+Redshift credentials are stored in AWS Secrets Manager rather than hardcoded in source code.
+
+The application references the secret through its configured secret ARN.
+
+
+# Observability & Alerting
+
+ServicePulse includes operational monitoring through AWS CloudWatch and notification through SNS.
+
+## CloudWatch
+
+CloudWatch is used for operational visibility into AWS workloads.
+
+Monitoring covers relevant execution and application logs for services such as:
+
+- Lambda
+- Step Functions
+- Glue
+- Other AWS pipeline components
+
+## SNS
+
+Amazon SNS is used to deliver operational notifications for configured pipeline/application events.
+
+Conceptually:
+
+```text
+AWS Service
+    ↓
+CloudWatch / Pipeline Event
+    ↓
+SNS
+    ↓
+Notification
+```
+
+This provides an operational feedback loop rather than relying only on manual log inspection.
+
+---
+
+# Configuration & Secrets
+
+The project separates configuration from application logic.
+
+## `.env.example`
+
+Contains the expected environment variable structure without exposing credentials.
+
+
+## `.streamlit/secrets.toml`
+
+Contains local Streamlit runtime secrets and must not be committed.
+
+## AWS Secrets Manager
+
+Stores sensitive Redshift credentials used by the application.
+
+### Example Configuration
+
+```toml
+AWS_ACCESS_KEY_ID = "YOUR_AWS_ACCESS_KEY"
+AWS_SECRET_ACCESS_KEY = "YOUR_AWS_SECRET_KEY"
+AWS_DEFAULT_REGION = "ap-south-1"
+
+REDSHIFT_SECRET_ARN = "YOUR_REDSHIFT_SECRET_ARN"
+
+REDSHIFT_WORKGROUP = "servicepulse-workgroup"
+REDSHIFT_DATABASE = "dev"
+REDSHIFT_SCHEMA = "servicepulse"
+REDSHIFT_TABLE = "fact_incidents"
+```
+
+> Never replace placeholders with real credentials in documentation or commit them to Git.
+
+---
+
+# Local Development
+
+## Prerequisites
+
+- Python 3.12
+- Git
+- AWS account
+- Appropriate AWS permissions
+- Redshift Serverless environment
+- AWS Secrets Manager secret
+- Docker, if using the local Lambda build workflow
+
+## Clone
+
+```bash
+git clone <YOUR_GITHUB_REPOSITORY_URL>
+cd servicepulse
+```
+
+## Virtual Environment
+
+```bash
+python -m venv venv
+```
+
+Windows PowerShell:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+## Install Dependencies
+
+For the pipeline/backend:
+
+```bash
+pip install -r requirements.txt
+```
+
+For the Streamlit application:
+
+```bash
+pip install -r requirements-streamlit.txt
+```
+
+## Run Streamlit
+
+```bash
+streamlit run streamlit_app/app.py
+```
+
+Application:
+
+```text
+http://localhost:8501
+```
+
+---
+
+# Testing
+
+The project includes a dedicated test suite under:
+
+```text
+tests/
+```
+
+Pytest is used as the testing framework.
+
+Run:
+
+```bash
+pytest
+```
+
+For more detailed output:
+
+```bash
+pytest -v
+```
+
+The project also includes:
+
+```text
+pytest.ini
+```
+
+for test configuration.
+
+---
+
+# AWS Connectivity Validation
+
+The repository includes:
+
+```text
+test_aws.py
+```
+
+for validating AWS connectivity/configuration during development.
+
+This type of integration validation helps verify:
+
+- AWS authentication
+- Secrets Manager access
+- AWS region configuration
+- Required runtime configuration
+
+Production credentials should always be provided through secure configuration mechanisms.
+
+---
+
+# Deployment
+
+## Lambda
+
+Lambda deployment artifacts are maintained under:
+
+```text
+lambda_build/
+```
+
+and the packaged deployment artifact:
+
+```text
+servicepulse-lambda.zip
+```
+
+The Lambda runtime uses:
+
+```text
+src/handler.py
+```
+
+as the application entry point.
+
+## AWS Pipeline
+
+The production pipeline is composed of:
+
+```text
+EventBridge
+     ↓
+Step Functions
+     ↓
+Lambda
+     ↓
+S3
+     ↓
+Glue
+     ↓
+S3
+     ↓
+Redshift
+```
+
+## Streamlit Cloud
+
+The Streamlit application is deployed through Streamlit Community Cloud.
+
+Live application:
+
+**https://servicepulseai.streamlit.app/**
+
+Deployment flow:
+
+```text
+GitHub
+   ↓
+Streamlit Community Cloud
+   ↓
+Streamlit Application
+   ↓
+AWS Services
+```
+
+---
+
+# Operational Workflow
+
+The complete operational lifecycle is:
+
+```text
+             ┌──────────────────┐
+             │    Schedule      │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │   EventBridge    │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │ Step Functions   │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │     Lambda       │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │    S3 Bronze     │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │   AWS Glue       │
+             │    PySpark       │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │    S3 Silver     │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │  Data Quality    │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │ Redshift Gold    │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │    Streamlit     │
+             └──────────────────┘
+
+              ┌─────────────────┐
+              │ CloudWatch      │
+              │ + SNS           │
+              └─────────────────┘
+```
+
+---
+
+# Engineering Practices
+
+ServicePulse follows production-oriented engineering principles:
+
+### Separation of Concerns
+
+Ingestion, services, repositories, transformations, database access, SQL, and presentation are separated.
+
+### Serverless First
+
+AWS managed/serverless services are used where appropriate to reduce infrastructure management overhead.
+
+### Idempotent Processing
+
+Pipeline components are designed to avoid duplicate processing and support safe re-execution.
+
+### Incremental Processing
+
+The pipeline is designed around incremental data movement rather than repeatedly processing the entire dataset.
+
+### Observability
+
+CloudWatch and SNS provide operational visibility and notifications.
+
+### Secure Configuration
+
+Credentials are externalized through AWS Secrets Manager and environment-specific secret configuration.
+
+### Testability
+
+Application and pipeline logic are organized so that components can be validated independently.
+
+### Reproducibility
+
+Dependency files and structured configuration support repeatable development and deployment.
+
+
+# Roadmap
+
+## ML Extension
+
+- [ ] Incident classification
+- [ ] SLA breach prediction
+- [ ] Feature engineering pipeline
+- [ ] Model training
+- [ ] Model registry
+- [ ] Model deployment
+- [ ] Model monitoring
+
+---
+
+# Highlights
+
+ServicePulse demonstrates practical experience across the modern data engineering lifecycle:
+
+```text
+API Integration
+      ↓
+Serverless Ingestion
+      ↓
+Workflow Orchestration
+      ↓
+Data Lake
+      ↓
+Distributed ETL
+      ↓
+Data Quality
+      ↓
+Data Warehouse
+      ↓
+Secure Data Access
+      ↓
+Observability
+      ↓
+Operational Alerting
+      ↓
+Analytics Application
+```
+
+### Key Skills Demonstrated
+
+**Data Engineering**
+
+- ETL / ELT
+- Incremental data processing
+- Data lake architecture
+- Medallion architecture
+- Data quality
+- Data warehouse design
+
+**AWS**
+
+- Lambda
+- Step Functions
+- EventBridge
+- S3
+- Glue
+- Redshift Serverless
+- Secrets Manager
+- IAM
+- CloudWatch
+- SNS
+
+**Python**
+
+- Modular architecture
+- API integration
+- Repository pattern
+- Service layer
+- Data processing
+- Automated testing
+
+**Analytics**
+
+- Pandas
+- Plotly
+- Streamlit
+- KPI design
+- Operational analytics
+
+**Engineering**
+
+- Git / GitHub
+- Environment configuration
+- Secure secrets management
+- Testing
+- Serverless architecture
+- Production-oriented project structure
+
+---
+
+# Future ML Platform
+
+The curated incident data provides a foundation for machine learning use cases.
+
+## Incident Classification
+
+```text
+Incident Description
+        ↓
 NLP / ML Model
-       │
-       ▼
-Category / Subcategory / Assignment Group
+        ↓
+Category / Subcategory
+        ↓
+Assignment / Routing
 ```
 
-**SLA Breach Prediction**
+## SLA Breach Prediction
 
 ```text
-Ticket Features
-       │
-       ▼
+Incident Features
+        ↓
 ML Model
-       │
-       ▼
+        ↓
 SLA Breach Probability
+        ↓
+Operational Alert
 ```
 
-The ML platform will be developed independently after the Data Engineering platform is stable.
+These capabilities can be added on top of the existing Gold-layer analytical data without redesigning the core ingestion pipeline.
 
 ---
 
-## Production Design Principles
-
-ServicePulse is being designed around the following engineering principles:
-
-* **Incremental over full-load processing**
-* **Idempotent over duplicate-prone processing**
-* **Automated over manual execution**
-* **Observable over opaque pipelines**
-* **Secure by default**
-* **Infrastructure as Code**
-* **Environment separation**
-* **Testable components**
-* **Recoverable workflows**
-* **Documentation alongside implementation**
-
-A feature will only be described as implemented once it has been built and tested.
-
----
-
-## Roadmap
-
-### Phase 1 — ServiceNow Ingestion
-
-* [ ] ServiceNow API client
-* [ ] Authentication
-* [ ] Pagination
-* [ ] Incremental extraction
-* [ ] Checkpoint management
-* [ ] Retry handling
-* [ ] Bronze ingestion
-
-### Phase 2 — Data Lake
-
-* [ ] S3 Bronze
-* [ ] S3 Silver
-* [ ] Glue Catalog
-* [ ] PySpark transformations
-* [ ] Parquet partitioning
-
-### Phase 3 — Data Quality
-
-* [ ] Schema validation
-* [ ] Completeness checks
-* [ ] Duplicate detection
-* [ ] Business rules
-* [ ] Failure handling
-
-### Phase 4 — Data Warehouse
-
-* [ ] Redshift
-* [ ] Star schema
-* [ ] Fact tables
-* [ ] Dimension tables
-* [ ] Incremental loading
-
-### Phase 5 — Orchestration
-
-* [ ] Step Functions
-* [ ] EventBridge
-* [ ] Retry policies
-* [ ] Failure states
-* [ ] Checkpoint recovery
-
-### Phase 6 — Analytics & Visualization
-
-* [x] Redshift → Streamlit Dashboard
-* [x] KPI Model
-* [x] Operational Dashboard
-* [x] Real-time Filtering
-* [x] Interactive Charts (Plotly)
-* [x] Data Freshness Indicators
-* [ ] Redshift → Power BI
-* [ ] SLA Dashboard
-
-### Phase 7 — Productionization
-
-* [ ] Terraform
-* [ ] Dev/Prod environments
-* [ ] GitHub Actions
-* [ ] Automated tests
-* [ ] Monitoring
-* [ ] Alerting
-* [ ] Operational runbook
-
-### Phase 8 — Future ML Platform
-
-* [ ] Ticket classification
-* [ ] SLA breach prediction
-* [ ] Feature engineering
-* [ ] Model training
-* [ ] Model evaluation
-* [ ] Model deployment
-* [ ] ML monitoring
-
----
-
-## Project Status
-
-**ServicePulse is currently in the architecture and implementation phase.**
-
-The repository will be updated continuously as each component is implemented, tested, and productionized.
-
----
-
-## License
-
-License information will be added as the repository is finalized.
-
----
-
-## Author
+# Author
 
 **Ravi Kumar**
 
-Data Science · Machine Learning · Data Engineering · Generative AI
+AI/ML Engineer
 
 ---
 
-> **ServicePulse - Build the data foundation first. Turn operational data into reliable analytics and future ML capabilities.**
+> **ServicePulse - From enterprise incident data to production-ready analytics.**
