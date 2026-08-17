@@ -94,3 +94,16 @@ desktop.ini
 *.temp
 *.swp
 *.swo
+
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+.streamlit/secrets.toml
+
+.env
+.env.*
+
+.idea/
+.vscode/

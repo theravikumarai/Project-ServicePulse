@@ -370,6 +370,7 @@ The repository structure will evolve as the implementation progresses.
 | Component                  | Status     |
 | -------------------------- | ---------- |
 | Project architecture       | 🟢 Defined |
+| Analytics Dashboard        | 🟢 Implemented |
 | ServiceNow API integration | ⚪ Planned  |
 | Incremental ingestion      | ⚪ Planned  |
 | S3 Bronze                  | ⚪ Planned  |
@@ -475,6 +476,97 @@ The Gold warehouse is intended to support operational dashboards such as:
 
 ---
 
+## ServicePulse Analytics Dashboard
+
+ServicePulse includes an interactive **Streamlit-based analytics dashboard** that provides real-time incident analytics powered by the Redshift data warehouse.
+
+### Dashboard Features
+
+**Real-Time KPIs**
+
+* Total Incidents
+* Open Incidents
+* Critical Open Incidents (actionable metric)
+* Average Incident Age
+* On Hold Incidents
+
+**Interactive Filters**
+
+* Date Range
+* Incident State
+* Priority Level
+* Category
+
+All KPIs and charts react dynamically to filter changes.
+
+**Analytics Charts**
+
+* **Incident Trend** — Monthly incident creation trend line
+* **Incident Status Distribution** — Pie chart showing incident state breakdown
+* **Priority Distribution** — Horizontal bar chart by priority level
+* **Category Distribution** — Horizontal bar chart by incident category
+* **Incident Aging Analysis** — Bar chart with aging buckets (0-2, 3-7, 8-14, 15-30, 30+ days)
+
+**Incident Details Table**
+
+* Searchable and sortable incident data
+* Key incident attributes (ID, description, state, priority, category, age, created date)
+* Fully responsive to filter selection
+
+### Technology Stack
+
+* **Frontend Framework:** Streamlit
+* **Data Visualization:** Plotly (interactive charts)
+* **Data Processing:** Pandas
+* **Database Connection:** AWS Redshift Data API
+* **Authentication:** AWS Secrets Manager
+* **Deployment:** Streamlit Cloud (or self-hosted)
+
+### Architecture
+
+```text
+Amazon Redshift Data Warehouse
+           │
+           │ (Redshift Data API)
+           │
+           ▼
+    Python / Pandas
+           │
+           ▼
+    Streamlit Application
+           │
+           ├────────► Interactive Filters
+           │
+           ├────────► KPI Cards
+           │
+           ├────────► Plotly Charts
+           │
+           └────────► Incident Details Table
+           │
+           ▼
+    User Browser
+```
+
+### Data Freshness
+
+The dashboard shows:
+
+* **Last Refresh Time** — When data was last queried from Redshift
+* **Connection Status** — AWS Redshift connection indicator
+* **Record Count** — Number of incidents in the current view
+
+This demonstrates operational awareness of the data pipeline.
+
+### Deployment
+
+The dashboard can be deployed to:
+
+* **Streamlit Cloud** — Free community deployment
+* **Self-hosted** — Docker container on AWS ECS, EC2, or on-premises
+* **AWS-native** — Integration with AWS services for enterprise deployments
+
+---
+
 ## Future ML Platform
 
 The curated Gold datasets are designed to support a separate downstream ML project.
@@ -572,12 +664,16 @@ A feature will only be described as implemented once it has been built and teste
 * [ ] Failure states
 * [ ] Checkpoint recovery
 
-### Phase 6 — Analytics
+### Phase 6 — Analytics & Visualization
 
+* [x] Redshift → Streamlit Dashboard
+* [x] KPI Model
+* [x] Operational Dashboard
+* [x] Real-time Filtering
+* [x] Interactive Charts (Plotly)
+* [x] Data Freshness Indicators
 * [ ] Redshift → Power BI
-* [ ] KPI model
-* [ ] Operational dashboard
-* [ ] SLA dashboard
+* [ ] SLA Dashboard
 
 ### Phase 7 — Productionization
 
