@@ -1,5 +1,3 @@
-import os
-
 import boto3
 import pandas as pd
 import streamlit as st
@@ -15,16 +13,9 @@ class RedshiftClient:
 
     def __init__(self):
 
-        # ---------------------------------------------------------
-        # AWS Configuration
-        # ---------------------------------------------------------
-
-        # Streamlit Cloud Secrets take priority.
-        # Local development falls back to your existing config.py
-        # and default AWS credential chain.
-        region = st.secrets.get(
+        self.region = st.secrets.get(
             "AWS_DEFAULT_REGION",
-            os.getenv("AWS_DEFAULT_REGION", AWS_REGION),
+            AWS_REGION,
         )
 
         self.workgroup = st.secrets.get(
@@ -37,61 +28,25 @@ class RedshiftClient:
             REDSHIFT_DATABASE,
         )
 
-        self.db_user = st.secrets.get(
-            "REDSHIFT_DB_USER",
-            "streamlit_reader",
+        self.secret_arn = st.secrets[
+            "REDSHIFT_SECRET_ARN"
+        ]
+
+        self.client = boto3.client(
+            "redshift-data",
+            region_name=self.region,
         )
-
-        # ---------------------------------------------------------
-        # Create Redshift Data API client
-        # ---------------------------------------------------------
-
-        access_key = st.secrets.get(
-            "AWS_ACCESS_KEY_ID",
-            os.getenv("AWS_ACCESS_KEY_ID"),
-        )
-
-        secret_key = st.secrets.get(
-            "AWS_SECRET_ACCESS_KEY",
-            os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
-
-        # Cloud: use credentials from Streamlit Secrets
-        # Local: use normal boto3 credential chain
-        if access_key and secret_key:
-
-            self.client = boto3.client(
-                "redshift-data",
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-            )
-
-        else:
-
-            self.client = boto3.client(
-                "redshift-data",
-                region_name=region,
-            )
-
-    # -------------------------------------------------------------
-    # Execute SQL Query
-    # -------------------------------------------------------------
 
     def execute_query(self, sql: str) -> pd.DataFrame:
 
         response = self.client.execute_statement(
             WorkgroupName=self.workgroup,
             Database=self.database,
-            DbUser=self.db_user,
+            SecretArn=self.secret_arn,
             Sql=sql,
         )
 
         statement_id = response["Id"]
-
-        # ---------------------------------------------------------
-        # Wait for query completion
-        # ---------------------------------------------------------
 
         while True:
 
@@ -106,7 +61,6 @@ class RedshiftClient:
                 "FAILED",
                 "ABORTED",
             }:
-
                 raise RuntimeError(
                     status.get(
                         "Error",
@@ -114,26 +68,14 @@ class RedshiftClient:
                     )
                 )
 
-        # ---------------------------------------------------------
-        # Get query result
-        # ---------------------------------------------------------
-
         result = self.client.get_statement_result(
             Id=statement_id
         )
-
-        # ---------------------------------------------------------
-        # Extract columns
-        # ---------------------------------------------------------
 
         columns = [
             column["name"]
             for column in result["ColumnMetadata"]
         ]
-
-        # ---------------------------------------------------------
-        # Extract rows
-        # ---------------------------------------------------------
 
         rows = []
 
@@ -162,10 +104,6 @@ class RedshiftClient:
                     row.append(None)
 
             rows.append(row)
-
-        # ---------------------------------------------------------
-        # Return DataFrame
-        # ---------------------------------------------------------
 
         return pd.DataFrame(
             rows,
