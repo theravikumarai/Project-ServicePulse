@@ -1,4 +1,7 @@
 requests
-python-dotenv
 pytest
+streamlit
+pandas
+plotly
 boto3
+python-dotenv
