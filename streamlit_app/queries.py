@@ -3,7 +3,8 @@ from config import (
     REDSHIFT_TABLE,
 )
 
-def get_incidents_query():
+
+def get_incidents_query() -> str:
 
     return f"""
         SELECT
@@ -22,5 +23,5 @@ def get_incidents_query():
             updated_at,
             incident_age_days
         FROM {REDSHIFT_SCHEMA}.{REDSHIFT_TABLE}
-        ORDER BY updated_at DESC
+        ORDER BY updated_at DESC;
     """

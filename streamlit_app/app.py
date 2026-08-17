@@ -10,6 +10,7 @@ st.set_page_config(
     layout="wide",
 )
 
+
 st.title("ServicePulse")
 st.subheader("Incident Analytics Dashboard")
 
@@ -26,7 +27,9 @@ def load_incidents():
 
 try:
 
-    df = load_incidents()
+    with st.spinner("Loading incident data..."):
+
+        df = load_incidents()
 
     st.success(
         f"Successfully loaded {len(df)} incidents."
@@ -35,6 +38,7 @@ try:
     st.dataframe(
         df,
         use_container_width=True,
+        hide_index=True,
     )
 
 except Exception as exc:

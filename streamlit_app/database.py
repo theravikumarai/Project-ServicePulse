@@ -1,9 +1,14 @@
+import time
+
 import boto3
 import pandas as pd
 import streamlit as st
 
 from config import (
     AWS_REGION,
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    REDSHIFT_SECRET_ARN,
     REDSHIFT_WORKGROUP,
     REDSHIFT_DATABASE,
 )
@@ -13,28 +18,19 @@ class RedshiftClient:
 
     def __init__(self):
 
-        self.region = st.secrets.get(
-            "AWS_DEFAULT_REGION",
-            AWS_REGION,
-        )
+        self.region = AWS_REGION
 
-        self.workgroup = st.secrets.get(
-            "REDSHIFT_WORKGROUP",
-            REDSHIFT_WORKGROUP,
-        )
+        self.workgroup = REDSHIFT_WORKGROUP
 
-        self.database = st.secrets.get(
-            "REDSHIFT_DATABASE",
-            REDSHIFT_DATABASE,
-        )
+        self.database = REDSHIFT_DATABASE
 
-        self.secret_arn = st.secrets[
-            "REDSHIFT_SECRET_ARN"
-        ]
+        self.secret_arn = REDSHIFT_SECRET_ARN
 
         self.client = boto3.client(
             "redshift-data",
             region_name=self.region,
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         )
 
     def execute_query(self, sql: str) -> pd.DataFrame:
@@ -54,10 +50,12 @@ class RedshiftClient:
                 Id=statement_id
             )
 
-            if status["Status"] == "FINISHED":
+            current_status = status["Status"]
+
+            if current_status == "FINISHED":
                 break
 
-            if status["Status"] in {
+            if current_status in {
                 "FAILED",
                 "ABORTED",
             }:
@@ -68,24 +66,33 @@ class RedshiftClient:
                     )
                 )
 
-        result = self.client.get_statement_result(
+            time.sleep(0.5)
+
+        return self._get_results(statement_id)
+
+    def _get_results(self, statement_id: str) -> pd.DataFrame:
+
+        response = self.client.get_statement_result(
             Id=statement_id
         )
 
         columns = [
             column["name"]
-            for column in result["ColumnMetadata"]
+            for column in response["ColumnMetadata"]
         ]
 
         rows = []
 
-        for record in result["Records"]:
+        for record in response["Records"]:
 
             row = []
 
             for value in record:
 
-                if "stringValue" in value:
+                if value.get("isNull"):
+                    row.append(None)
+
+                elif "stringValue" in value:
                     row.append(value["stringValue"])
 
                 elif "longValue" in value:
@@ -96,9 +103,6 @@ class RedshiftClient:
 
                 elif "booleanValue" in value:
                     row.append(value["booleanValue"])
-
-                elif value.get("isNull"):
-                    row.append(None)
 
                 else:
                     row.append(None)
